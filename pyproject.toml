@@ -1,0 +1,11 @@
+[project]
+name = "llm-sql"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "google-adk>=1.28.0",
+    "psycopg>=3.3.3",
+    "psycopg2>=2.9.11",
+]
