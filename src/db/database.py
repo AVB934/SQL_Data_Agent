@@ -1,4 +1,5 @@
 import psycopg2
+from src.schemas.schemas import TableSpec
 
 
 class Database:
@@ -28,16 +29,6 @@ class Database:
             self.connection.close()
             print("Database connection closed")
 
-    def execute_query(self, query):
-        if not self.connection:
-            print("No database connection")
-            return None
-        try:
-            cursor = self.connection.cursor()
-            cursor.execute(query)
-            result = cursor.fetchall()
-            cursor.close()
-            return result
-        except Exception as e:
-            print(f"Error executing query: {e}")
-            return None
+ 
+
+    

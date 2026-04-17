@@ -1,4 +1,21 @@
 {
   "python.terminal.executeInFileDir": true,
-  "python.terminal.useEnvFile": true
+  "python.terminal.useEnvFile": true,
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  "flake8.enabled": false,
+  "pylint.enabled": false,
+  "ruff.enabled": true,
+
+  "python.languageServer": "Pylance",
+  "python.analysis.typeCheckingMode": "basic",
+  "files.autoSave": "afterDelay",
+  "git.autofetch": true
 }

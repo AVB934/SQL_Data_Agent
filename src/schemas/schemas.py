@@ -1,65 +1,122 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
+# =========================================================
+# Base Schema
+# =========================================================
 
 class DatabaseSchema(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
+# =========================================================
+# Core Table Representation
+# =========================================================
+
+class ColumnSpec(DatabaseSchema):
+    name: str = Field(min_length=1)
+    dtype: str = Field(min_length=1)
+    is_nullable: bool = True
+
+
+class ForeignKey(DatabaseSchema):
+    column: str = Field(min_length=1)
+    references_table: str = Field(min_length=1)
+    references_column: str = Field(min_length=1)
+
+
 class TableSpec(DatabaseSchema):
     table_name: str = Field(min_length=1)
-    columns: list[str] = Field(min_length=1)
-    column_types: list[str] = Field(min_length=1)
-    primary_key: str = Field(min_length=1)
-    foreign_keys: list[str] = Field(default_factory=list)
-    sample_rows: list[list] = Field(default_factory=list)
+    columns: list[ColumnSpec] = Field(min_length=1)
+    #column_types: list[str] = Field(min_length=1)
+    primary_key: list[str] = Field(min_length=1)  # supports composite keys
+    foreign_keys: list[ForeignKey] = Field(default_factory=list)
+
+    # Each row is a dict: {column_name: value}
+    sample_rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
-# Schema Agent
+# =========================================================
+# Schema Agent Output (Enrichment Layer)
+# =========================================================
+
 class ColumnDescription(DatabaseSchema):
+    table_name: str = Field(min_length=1)
     column_name: str = Field(min_length=1)
     inferred_meaning: str = Field(min_length=1)
     sample_values: list[str] = Field(default_factory=list)
 
 
-# Filter Agent
+class UpdatedTableSpec(TableSpec):
+    column_descriptions: list[ColumnDescription] = Field(min_length=1)
+
+
+# =========================================================
+# Filter Agent Output
+# =========================================================
+
 class FilteredSpec(DatabaseSchema):
-    filtered_tables: list[TableSpec] = Field(default_factory=list)
+    filtered_tables: list[UpdatedTableSpec] = Field(min_length=1)
 
 
-# Data Agent
+# =========================================================
+# Data Agent Output
+# =========================================================
+
 class DataResultSpec(DatabaseSchema):
-    query: str = Field(min_length=1)  # SQL query executed
-    results: list[str] = Field(default_factory=list)
-    tables: list[TableSpec] = Field(default_factory=list)
+    query: str = Field(min_length=1)  # executed SQL
+
+    # Each row must preserve column → value mapping
+    results: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Tables used in query
+    tables: list[UpdatedTableSpec] = Field(min_length=1)
 
 
-# Verify Agent
+# =========================================================
+# Verify Agent Output
+# =========================================================
+
 class ReviewFilteredSpec(DatabaseSchema):
-    filtered_tables: list[TableSpec] = Field(default_factory=list)
-    review_status: Literal["approved", "pending", "rejected"] = Field(default="pending")
+    filtered_tables: list[UpdatedTableSpec] = Field(min_length=1)
+    review_status: Literal["approved", "pending", "rejected"] = "pending"
+    reason: str | None = None
 
 
 class ReviewDataResultSpec(DatabaseSchema):
     query: str = Field(min_length=1)
-    results: list[str] = Field(default_factory=list)
-    tables: list[TableSpec] = Field(default_factory=list)
-    review_status: Literal["approved", "pending", "rejected"] = Field(default="pending")
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    tables: list[UpdatedTableSpec] = Field(min_length=1)
+
+    review_status: Literal["approved", "pending", "rejected"] = "pending"
+    reason: str | None = None
 
 
-# Citations
+# =========================================================
+# Citations (Traceability Layer)
+# =========================================================
+
 class Citation(DatabaseSchema):
     source_file: str = Field(min_length=1)
     table_name: str = Field(min_length=1)
     column_name: str = Field(min_length=1)
-    row_reference: str = Field(min_length=1)
 
+    # Deterministic row identification (e.g. {"order_id": 123})
+    row_identifier: dict[str, Any] = Field(min_length=1)
+
+
+# =========================================================
+# Final Answer
+# =========================================================
 
 class FinalAnswer(DatabaseSchema):
     original_question: str = Field(min_length=1)
     answer: str = Field(min_length=1)
+
     citations: list[Citation] = Field(min_length=1)
-    review_status: Literal["approved", "pending", "rejected"] = Field(default="pending")
+
+    review_status: Literal["approved", "pending", "rejected"] = "pending"
