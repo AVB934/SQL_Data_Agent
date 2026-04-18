@@ -13,8 +13,8 @@
     "editor.formatOnSave": true,
 
     "editor.codeActionsOnSave": {
-      "source.fixAll.ruff": true,
-      "source.organizeImports.ruff": true
+      "source.fixAll.ruff": "always",
+      "source.organizeImports.ruff": "always"
     }
   },
 
@@ -43,7 +43,7 @@
   // ========================================
   "editor.tabSize": 4,
   "editor.insertSpaces": true,
-  "editor.rulers": [88],
+  "editor.rulers": [],
   "editor.wordWrap": "off",
 
   // ========================================
