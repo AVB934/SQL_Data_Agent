@@ -4,18 +4,15 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-# =========================================================
 # Base Schema
-# =========================================================
+
 
 class DatabaseSchema(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
-# =========================================================
 # Core Table Representation
-# =========================================================
+
 
 class ColumnSpec(DatabaseSchema):
     name: str = Field(min_length=1)
@@ -32,7 +29,7 @@ class ForeignKey(DatabaseSchema):
 class TableSpec(DatabaseSchema):
     table_name: str = Field(min_length=1)
     columns: list[ColumnSpec] = Field(min_length=1)
-    #column_types: list[str] = Field(min_length=1)
+    # column_types: list[str] = Field(min_length=1)
     primary_key: list[str] = Field(min_length=1)  # supports composite keys
     foreign_keys: list[ForeignKey] = Field(default_factory=list)
 
@@ -40,9 +37,8 @@ class TableSpec(DatabaseSchema):
     sample_rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
-# =========================================================
-# Schema Agent Output (Enrichment Layer)
-# =========================================================
+# Schema Agent Output
+
 
 class ColumnDescription(DatabaseSchema):
     table_name: str = Field(min_length=1)
@@ -55,17 +51,15 @@ class UpdatedTableSpec(TableSpec):
     column_descriptions: list[ColumnDescription] = Field(min_length=1)
 
 
-# =========================================================
 # Filter Agent Output
-# =========================================================
+
 
 class FilteredSpec(DatabaseSchema):
     filtered_tables: list[UpdatedTableSpec] = Field(min_length=1)
 
 
-# =========================================================
 # Data Agent Output
-# =========================================================
+
 
 class DataResultSpec(DatabaseSchema):
     query: str = Field(min_length=1)  # executed SQL
@@ -77,9 +71,8 @@ class DataResultSpec(DatabaseSchema):
     tables: list[UpdatedTableSpec] = Field(min_length=1)
 
 
-# =========================================================
 # Verify Agent Output
-# =========================================================
+
 
 class ReviewFilteredSpec(DatabaseSchema):
     filtered_tables: list[UpdatedTableSpec] = Field(min_length=1)
@@ -96,9 +89,8 @@ class ReviewDataResultSpec(DatabaseSchema):
     reason: str | None = None
 
 
-# =========================================================
 # Citations (Traceability Layer)
-# =========================================================
+
 
 class Citation(DatabaseSchema):
     source_file: str = Field(min_length=1)
@@ -109,9 +101,8 @@ class Citation(DatabaseSchema):
     row_identifier: dict[str, Any] = Field(min_length=1)
 
 
-# =========================================================
 # Final Answer
-# =========================================================
+
 
 class FinalAnswer(DatabaseSchema):
     original_question: str = Field(min_length=1)

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Optional
 
 from src.agents.base import AgentContext, SchemaAgent
-from src.agents.baseline import FilterAgent, DataAgent, VerifyAgent
+from src.agents.baseline import FilterAgent, VerifyAgent, DataAgent
 from src.db import Database
 from src.schemas.schemas import (
     Citation,
@@ -12,9 +12,7 @@ from src.schemas.schemas import (
     TableSpec,
 )
 
-
-
-# PROMPTS 
+# PROMPTS
 
 
 SCHEMA_AGENT_PROMPT = """
@@ -34,10 +32,7 @@ VERIFY_AGENT_PROMPT = """
 """
 
 
-
-
 class Main:
- 
 
     def __init__(self):
         self.db: Optional[Database] = None
@@ -46,9 +41,7 @@ class Main:
         # shared execution context
         self.context: Optional[AgentContext] = None
 
-   
     # DB CONNECTION
-   
 
     def connect(
         self,
@@ -67,8 +60,6 @@ class Main:
                 password=password,
             )
             self.db.connect()
-
-            
 
             print(f"Connected to {database}@{host}")
             print(f"Loaded {len(self.tables)} tables")
@@ -97,14 +88,12 @@ class Main:
 
         print(f"\nQuestion: {question}\n")
 
-   
         # Initialize Context
 
         self.context = AgentContext(self.tables)
 
-   
         # 1. SCHEMA AGENT
-  
+
         schema_agent = SchemaAgent(self.context)
         enriched_tables = schema_agent.run()
 
@@ -113,7 +102,6 @@ class Main:
             return None
 
         print(f"Schema enriched: {len(enriched_tables)} tables")
-
 
         # 2. FILTER AGENT
 
@@ -129,7 +117,6 @@ class Main:
 
         print(f"Filtered to {len(filtered_spec.filtered_tables)} tables")
 
-
         # 3. DATA AGENT
 
         data_agent = DataAgent(self.context)
@@ -144,21 +131,18 @@ class Main:
 
         print(f"Query executed, rows: {len(data_result.results)}")
 
- 
         # 4. VERIFY DATA
-  
+
         review_data = verify_agent.review_data(data_result)
 
         print(f"Verification status: {review_data.review_status}")
 
-  
         # 5. CITATIONS
 
         citations = self._generate_citations(data_result)
 
-  
         # 6. FINAL ANSWER
-  
+
         final_answer = FinalAnswer(
             original_question=question,
             answer=self._format_answer(data_result),
@@ -169,9 +153,7 @@ class Main:
         print("\nDone\n")
         return final_answer
 
- 
     # HELPERS
-   
 
     def _generate_citations(
         self,

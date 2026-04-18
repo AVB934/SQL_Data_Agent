@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.agents.base import BaseAgent, AgentContext
+from src.agents.base import BaseAgent
 from src.schemas.schemas import (
     DataResultSpec,
     FilteredSpec,
@@ -11,10 +11,8 @@ from src.schemas.schemas import (
     UpdatedTableSpec,
 )
 
-
-# =========================================================
 # Filter Agent
-# =========================================================
+
 
 class FilterAgent(BaseAgent):
     """
@@ -45,29 +43,23 @@ class FilterAgent(BaseAgent):
         return FilteredSpec(filtered_tables=relevant_tables)
 
 
-# =========================================================
 # Data Agent
-# =========================================================
+
 
 class DataAgent(BaseAgent):
     """
     Executes data operations.
 
-    NOTE: This is a baseline stub (no real SQL execution yet).
+
     """
 
     def run(self, question: str, filtered_spec: FilteredSpec) -> DataResultSpec:
         tables = filtered_spec.filtered_tables
 
         # Placeholder "query"
-        query = f"-- simulated query for: {question}"
+        query = "SELECT * FROM TABLE"
 
         results: list[dict[str, Any]] = []
-
-        # naive: return sample rows from first table
-        if tables:
-            first_table = tables[0]
-            results = first_table.sample_rows[:5]
 
         return DataResultSpec(
             query=query,
@@ -76,9 +68,8 @@ class DataAgent(BaseAgent):
         )
 
 
-# =========================================================
 # Verify Agent
-# =========================================================
+
 
 class VerifyAgent(BaseAgent):
     """
@@ -125,7 +116,7 @@ class VerifyAgent(BaseAgent):
             tables=data.tables,
             review_status="approved",
         )
-    
+
     def run(self, *args, **kwargs):
 
         return None

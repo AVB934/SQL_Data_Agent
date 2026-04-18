@@ -1,5 +1,5 @@
+#SQL_DATA_Agent\src\db\database.py
 import psycopg2
-from src.schemas.schemas import TableSpec
 
 
 class Database:
@@ -24,11 +24,23 @@ class Database:
         except Exception as e:
             print(f"Error connecting to database: {e}")
 
+    def execute_query(self, query: str):
+ 
+        if not self.connection:
+            print("Error: Database connection not established")
+            return None
+
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(query)
+            results = cursor.fetchall()
+            cursor.close()
+            return results
+        except Exception as e:
+            print(f"Error executing query: {e}")
+            return None
+
     def close(self):
         if self.connection:
             self.connection.close()
             print("Database connection closed")
-
- 
-
-    

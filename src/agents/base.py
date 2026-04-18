@@ -5,14 +5,12 @@ from typing import Any
 
 from src.schemas.schemas import (
     ColumnDescription,
-    UpdatedTableSpec,
     TableSpec,
+    UpdatedTableSpec,
 )
 
 
-# =========================================================
 # Shared Context (Pipeline State)
-# =========================================================
 
 class AgentContext:
     """
@@ -36,6 +34,7 @@ class AgentContext:
 # Base Agent
 # =========================================================
 
+
 class BaseAgent(ABC):
     """
     Abstract base class for all agents.
@@ -53,9 +52,10 @@ class BaseAgent(ABC):
         ...
 
 
-# =========================================================
+
 # Schema Agent
-# =========================================================
+
+
 
 class SchemaAgent(BaseAgent):
     """
@@ -74,7 +74,9 @@ class SchemaAgent(BaseAgent):
                 desc = ColumnDescription(
                     table_name=table.table_name,
                     column_name=col.name,
-                    inferred_meaning=self._infer_column_meaning(col.name, table.table_name),
+                    inferred_meaning=self._infer_column_meaning(
+                        col.name, table.table_name
+                    ),
                     sample_values=[
                         str(row.get(col.name, "")) for row in table.sample_rows
                     ],
@@ -95,9 +97,9 @@ class SchemaAgent(BaseAgent):
         self.context.updated_tables = updated_tables
         return updated_tables
 
-    # -----------------------------------------------------
+  
     # Placeholder for LLM call
-    # -----------------------------------------------------
+
     def _infer_column_meaning(self, column_name: str, table_name: str) -> str:
         # Replace with LLM later
         return f"{column_name} in {table_name}"

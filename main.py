@@ -1,3 +1,5 @@
+#SQL_DATA_Agent\main.py
+
 import os
 
 from dotenv import load_dotenv
@@ -6,7 +8,7 @@ from src.db import Database
 
 
 def main():
-    # Load environment variables
+    
     load_dotenv()
 
     # Create a database connection
