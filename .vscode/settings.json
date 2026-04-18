@@ -1,21 +1,53 @@
 {
+  // ========================================
+  // PYTHON TERMINAL SETTINGS
+  // ========================================
   "python.terminal.executeInFileDir": true,
   "python.terminal.useEnvFile": true,
+
+  // ========================================
+  // PYTHON-SPECIFIC EDITOR BEHAVIOR
+  // ========================================
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.formatOnSave": true,
+
     "editor.codeActionsOnSave": {
-      "source.fixAll.ruff": "explicit",
-      "source.organizeImports.ruff": "explicit"
+      "source.fixAll.ruff": true,
+      "source.organizeImports.ruff": true
     }
   },
 
+  // ========================================
+  // AUTO SAVE
+  // ========================================
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 800,
+
+  // ========================================
+  // LINTING (Ruff replaces flake8/pylint)
+  // ========================================
+  "ruff.enabled": true,
   "flake8.enabled": false,
   "pylint.enabled": false,
-  "ruff.enabled": true,
 
+  // ========================================
+  // TYPE CHECKING (Pylance)
+  // ========================================
   "python.languageServer": "Pylance",
   "python.analysis.typeCheckingMode": "basic",
-  "files.autoSave": "afterDelay",
+  "python.analysis.autoImportCompletions": true,
+
+  // ========================================
+  // EDITOR BEHAVIOR
+  // ========================================
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.rulers": [88],
+  "editor.wordWrap": "off",
+
+  // ========================================
+  // GIT
+  // ========================================
   "git.autofetch": true
 }

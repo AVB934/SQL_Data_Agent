@@ -1,4 +1,4 @@
-#SQL_DATA_Agent\main.py
+# SQL_DATA_Agent\main.py
 
 import os
 
@@ -8,7 +8,7 @@ from src.db import Database
 
 
 def main():
-    
+
     load_dotenv()
 
     # Create a database connection
@@ -31,5 +31,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
