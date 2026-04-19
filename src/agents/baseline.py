@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
-
 from src.agents.base import BaseAgent
+from src.LLM.gemini import GeminiClient
 from src.schemas.schemas import (
     DataResultSpec,
     FilteredSpec,
@@ -11,15 +10,29 @@ from src.schemas.schemas import (
     UpdatedTableSpec,
 )
 
+
 # Filter Agent
-
-
 class FilterAgent(BaseAgent):
     """
     Selects relevant tables for a given question.
     """
 
+    def __init__(self, context, filter_prompt: str = "") -> None:
+        super().__init__(context)
+        self.gemini_client = GeminiClient()
+        self.filter_prompt = filter_prompt
+
     def run(self, question: str) -> FilteredSpec:
+        """
+        TODO: Replace keyword matching with LLM call:
+            response = self.gemini_client.run(
+                system_instruction=self.filter_prompt,
+                question=self._build_filter_question(question),
+            )
+            relevant_names = self._parse_table_names(response)
+            relevant = [t for t in self.context.updated_tables if t.table_name in relevant_names]
+            return FilteredSpec(filtered_tables=relevant)
+        """
         relevant_tables: list[UpdatedTableSpec] = []
 
         question_lower = question.lower()
@@ -48,23 +61,42 @@ class FilterAgent(BaseAgent):
 
 class DataAgent(BaseAgent):
     """
-    Executes data operations.
-
-
+    Generates and executes SQL queries.
     """
 
+    def __init__(self, context, data_prompt: str = "") -> None:
+        super().__init__(context)
+        self.gemini_client = GeminiClient()
+        self.data_prompt = data_prompt
+
     def run(self, question: str, filtered_spec: FilteredSpec) -> DataResultSpec:
-        tables = filtered_spec.filtered_tables
+        db = self.context.metadata.get("db")
 
-        # Placeholder "query"
-        query = "SELECT * FROM TABLE"
+        if not db:
+            print("DataAgent: No database connection in context")
+            return DataResultSpec(
+                query="", results=[], tables=[]
+            )  # Return empty DataResultSpec, not None
 
-        results: list[dict[str, Any]] = []
+        # TODO: replace with LLM-generated query
+        query = "SELECT * FROM weather_data LIMIT 10"
+
+        results = db.execute_query(query) or []
+
+        # Convert tuples to dicts properly
+        if results and filtered_spec.filtered_tables:
+            cursor = db.connection.cursor()
+            cursor.execute(query)
+            columns = [desc[0] for desc in cursor.description]
+            cursor.close()
+            results_dict = [dict(zip(columns, row)) for row in results]
+        else:
+            results_dict = []
 
         return DataResultSpec(
             query=query,
-            results=results,
-            tables=tables,
+            results=results_dict,
+            tables=filtered_spec.filtered_tables,
         )
 
 
@@ -75,6 +107,11 @@ class VerifyAgent(BaseAgent):
     """
     Validates outputs before they proceed.
     """
+
+    def __init__(self, context, verify_prompt: str = "") -> None:
+        super().__init__(context)
+        self.gemini_client = GeminiClient()
+        self.verify_prompt = verify_prompt
 
     def review_filtered(self, spec: FilteredSpec) -> ReviewFilteredSpec:
         if not spec.filtered_tables:

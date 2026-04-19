@@ -1,9 +1,13 @@
+#SQL_DATA_Agent\src\agents\base.py
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
 
+
+
 from src.LLM.gemini import GeminiClient
+from src.config.prompts import SCHEMA_AGENT_QUESTION
 from src.schemas.schemas import (
     ColumnDescription,
     TableSpec,
@@ -11,8 +15,6 @@ from src.schemas.schemas import (
 )
 
 # Shared Context (Pipeline State)
-
-
 class AgentContext:
     """
     Shared state passed across agents.
@@ -79,12 +81,15 @@ class SchemaAgent(BaseAgent):
                     table_name=table.table_name,
                     column_name=col.name,
                     inferred_meaning=self._infer_column_meaning(
-                        col.name, table.table_name
+                        column_name=col.name,
+                        table_name=table.table_name,
+                        dtype=col.dtype,
+                        sample_values=[str(row.get(col.name, "")) for row in table.sample_rows],
                     ),
-                    sample_values=[
-                        str(row.get(col.name, "")) for row in table.sample_rows
-                    ],
+                    sample_values=[str(row.get(col.name, "")) for row in table.sample_rows],
                 )
+
+
                 column_descriptions.append(desc)
 
             updated = UpdatedTableSpec(
@@ -100,14 +105,24 @@ class SchemaAgent(BaseAgent):
 
         self.context.updated_tables = updated_tables
         return updated_tables
-
-    def _infer_column_meaning(self, column_name: str, table_name: str) -> str:
+    
+    def _infer_column_meaning(
+        self,
+        column_name: str,
+        table_name: str,
+        dtype: str,              # ← was missing
+        sample_values: list[str], # ← was missing
+    ) -> str:
         """
-        Use GeminiClient with schema_prompt to infer the semantic meaning of a column.
-        The prompt determines the analysis strategy.
+        Use GeminiClient to infer the semantic meaning of a column.
+        Question structure is owned by SCHEMA_AGENT_QUESTION in prompts.py.
         """
-        # Construct question with just the data - prompt dictates the behavior
-        question = f"Column: {column_name}\nTable: {table_name}"
+        question = SCHEMA_AGENT_QUESTION.format(
+            column_name=column_name,
+            table_name=table_name,
+            dtype=dtype,
+            sample_values=", ".join(sample_values) if sample_values else "none",
+        )
 
         try:
             response = self.gemini_client.run(
@@ -116,5 +131,7 @@ class SchemaAgent(BaseAgent):
             )
             return response.strip()
         except Exception as e:
-            print(f"Error inferring column meaning for {column_name}: {e}")
-            return f"{column_name}"
+            print(f"Error inferring meaning for {column_name}: {e}")
+            return column_name
+
+  

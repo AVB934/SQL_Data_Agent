@@ -8,4 +8,5 @@ dependencies = [
     "google-adk>=1.28.0",
     "psycopg>=3.3.3",
     "psycopg2>=2.9.11",
+    "streamlit>=1.28.0",
 ]

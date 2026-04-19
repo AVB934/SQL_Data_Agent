@@ -39,9 +39,7 @@ class GeminiClient:
         self.client = genai.Client(api_key=self.api_key)
 
     def run(self, system_instruction: str, question: str) -> str:
-
         config = types.GenerateContentConfig(
-            # system_instruction sets the model's behaviour for this call
             system_instruction=system_instruction,
             thinking_config=types.ThinkingConfig(
                 thinking_budget=self.thinking_budget,
@@ -50,10 +48,14 @@ class GeminiClient:
 
         response = self.client.models.generate_content(
             model=self.model_name,
-            contents=question,  # only the user question goes here
+            contents=question,
             config=config,
         )
 
-        
-        return response.text or ""
-    
+        if response.text is None:
+            raise ValueError(
+                f"Gemini returned no text for model '{self.model_name}'. "
+                "Response may have been blocked or empty."
+            )
+
+        return response.text

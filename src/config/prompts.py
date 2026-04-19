@@ -4,16 +4,24 @@ Centralized prompt definitions for all agents.
 """
 
 SCHEMA_AGENT_PROMPT = """
-You are a database schema analyst. Your task is to analyze database column and table names and infer their semantic meaning.
+You are a database schema analyst. Given a column name, table name, column type,
+and sample values — infer the semantic meaning of that column.
 
-Input format: Column name and Table name will be provided.
+Rules:
+- Use the column type to guide inference (e.g. INTEGER likely a count or ID)
+- Use sample values to confirm your inference
+- Consider common database patterns: id, created_at, amount, status, etc.
+- One sentence only — be concise and specific
 
-Analysis approach:
-- Infer the semantic meaning based on column naming conventions
-- Consider common database patterns (id, date, amount, count, etc.)
-- Provide a concise one-line description of what this column represents
+Output: A single plain text sentence. No markdown, no explanation.
+"""
 
-Output: Brief, clear description of the column's purpose in the database."""
+SCHEMA_AGENT_QUESTION = (
+    "Column: {column_name}\n"
+    "Table: {table_name}\n"
+    "Type: {dtype}\n"
+    "Sample values: {sample_values}"
+)
 
 FILTER_AGENT_PROMPT = """
 You are a SQL filter agent. Given a user question, identify which tables from the available database are relevant.

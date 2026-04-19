@@ -1,38 +1,29 @@
 # SQL_DATA_Agent\src\main.py
-
+# Prompts are defined in src/config/prompts.py
+# All agents use GeminiClient with prompts to guide LLM behavior
+# Agents: SchemaAgent, FilterAgent, DataAgent, VerifyAgent
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from src.agents.base import AgentContext, SchemaAgent
 from src.agents.baseline import DataAgent, FilterAgent, VerifyAgent
+from src.config.prompts import (
+    DATA_AGENT_PROMPT,
+    FILTER_AGENT_PROMPT,
+    SCHEMA_AGENT_PROMPT,
+    VERIFY_AGENT_PROMPT,
+)
 from src.db import Database
 from src.schemas.schemas import (
     Citation,
+    ColumnSpec,
     DataResultSpec,
     FinalAnswer,
+    ForeignKey,
     TableSpec,
 )
-
-# PROMPTS
-
-
-SCHEMA_AGENT_PROMPT = """
-
-"""
-
-FILTER_AGENT_PROMPT = """
-
-"""
-
-DATA_AGENT_PROMPT = """
-
-"""
-
-VERIFY_AGENT_PROMPT = """
-
-"""
 
 
 class Main:
@@ -64,6 +55,9 @@ class Main:
             )
             self.db.connect()
 
+            # Load tables from database and convert to TableSpec
+            self.tables = self._load_tables_from_database()
+
             print(f"Connected to {database}@{host}")
             print(f"Loaded {len(self.tables)} tables")
 
@@ -72,6 +66,164 @@ class Main:
         except Exception as e:
             print(f"Connection failed: {e}")
             return False
+
+    def _load_tables_from_database(self) -> list[TableSpec]:
+        """
+        Introspect database schema and convert to TableSpec objects.
+        """
+        if not self.db:
+            return []
+
+        try:
+            # Get raw schema from database
+            raw_tables = self.db.get_tables()
+
+            table_specs = []
+            for table_data in raw_tables:
+                table_name = table_data["table_name"]
+
+                # Get primary keys
+                primary_keys = self._get_primary_keys(table_name)
+
+                # Get foreign keys
+                foreign_keys = self._get_foreign_keys(table_name)
+
+                # Get sample rows
+                sample_rows = self._get_sample_rows(table_name)
+
+                # Convert columns to ColumnSpec
+                columns = [
+                    ColumnSpec(
+                        name=col["name"],
+                        dtype=col["type"],
+                        is_nullable=col.get("nullable", True),
+                    )
+                    for col in table_data["columns"]
+                ]
+
+                # Create TableSpec
+                table_spec = TableSpec(
+                    table_name=table_name,
+                    columns=columns,
+                    primary_key=primary_keys,
+                    foreign_keys=foreign_keys,
+                    sample_rows=sample_rows,
+                )
+
+                table_specs.append(table_spec)
+
+            return table_specs
+
+        except Exception as e:
+            print(f"Error loading tables from database: {e}")
+            return []
+
+    def _get_primary_keys(self, table_name: str) -> list[str]:
+        """
+        Get primary keys for a table using information_schema.
+        Uses parameterized queries to prevent SQL injection.
+        """
+        if not self.db:
+            return []
+
+        try:
+            query = """
+                SELECT column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu 
+                  ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.table_name = %s AND tc.constraint_type = 'PRIMARY KEY'
+                  AND tc.table_schema = 'public'
+            """
+            results = self.db.execute_query(query, (table_name,))
+            return [row[0] for row in results] if results else []
+        except Exception as e:
+            print(f"Error getting primary keys for {table_name}: {e}")
+            return []
+
+    def _get_foreign_keys(self, table_name: str) -> list[ForeignKey]:
+        """
+        Get foreign keys for a table using information_schema.
+        Uses parameterized queries to prevent SQL injection.
+        """
+        if not self.db:
+            return []
+
+        try:
+            query = """
+                SELECT
+                    kcu.column_name,
+                    ccu.table_name AS references_table,
+                    ccu.column_name AS references_column
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu 
+                  ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage ccu 
+                  ON ccu.constraint_name = tc.constraint_name
+                WHERE tc.table_name = %s AND tc.constraint_type = 'FOREIGN KEY'
+                  AND tc.table_schema = 'public'
+            """
+            results = self.db.execute_query(query, (table_name,))
+
+            foreign_keys = []
+            if results:
+                for col, ref_table, ref_col in results:
+                    foreign_keys.append(
+                        ForeignKey(
+                            column=col,
+                            references_table=ref_table,
+                            references_column=ref_col,
+                        )
+                    )
+
+            return foreign_keys
+        except Exception as e:
+            print(f"Error getting foreign keys for {table_name}: {e}")
+            return []
+
+    def _get_sample_rows(self, table_name: str, limit: int = 5) -> list[dict[str, Any]]:
+        """
+        Get sample rows from a table.
+        Note: Table name cannot be parameterized, but we validate it exists first.
+        """
+        if not self.db or not self.db.connection:
+            return []
+
+        try:
+            # Validate table exists in information_schema first (safe validation)
+            validation_query = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s"
+            validation_result = self.db.execute_query(validation_query, (table_name,))
+
+            if not validation_result:
+                print(f"Table {table_name} not found in schema")
+                return []
+
+            # Safe to execute with table name since we validated it exists
+            query = f"SELECT * FROM {table_name} LIMIT {limit}"
+
+            cursor = self.db.connection.cursor()
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+            # Get column names from cursor description
+            column_names = (
+                [desc[0] for desc in cursor.description] if cursor.description else []
+            )
+            cursor.close()
+
+            if not results or not column_names:
+                return []
+
+            # Convert rows to dictionaries
+            sample_rows = [
+                {col_name: value for col_name, value in zip(column_names, row)}
+                for row in results
+            ]
+
+            return sample_rows
+        except Exception as e:
+            print(f"Error getting sample rows for {table_name}: {e}")
+            return []
 
     def disconnect(self) -> None:
         if self.db:
@@ -91,13 +243,13 @@ class Main:
 
         print(f"\nQuestion: {question}\n")
 
-        # Initialize Context
-
+        # Initialize Context - ONCE for all agents
         self.context = AgentContext(self.tables)
+        self.context.metadata["db"] = self.db  # Database connection for DataAgent
 
         # 1. SCHEMA AGENT
 
-        schema_agent = SchemaAgent(self.context)
+        schema_agent = SchemaAgent(self.context, SCHEMA_AGENT_PROMPT)
         enriched_tables = schema_agent.run()
 
         if not enriched_tables:
@@ -108,10 +260,10 @@ class Main:
 
         # 2. FILTER AGENT
 
-        filter_agent = FilterAgent(self.context)
+        filter_agent = FilterAgent(self.context, FILTER_AGENT_PROMPT)
         filtered_spec = filter_agent.run(question)
 
-        verify_agent = VerifyAgent(self.context)
+        verify_agent = VerifyAgent(self.context, VERIFY_AGENT_PROMPT)
         review_filtered = verify_agent.review_filtered(filtered_spec)
 
         if review_filtered.review_status == "rejected":
@@ -122,7 +274,7 @@ class Main:
 
         # 3. DATA AGENT
 
-        data_agent = DataAgent(self.context)
+        data_agent = DataAgent(self.context, DATA_AGENT_PROMPT)
         data_result: DataResultSpec = data_agent.run(
             question,
             filtered_spec,

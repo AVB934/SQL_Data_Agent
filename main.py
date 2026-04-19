@@ -16,8 +16,8 @@ def main():
         host="localhost",
         port=5432,
         database="weather_db",
-        user=os.getenv("POSTGRES_USERNAME"),
-        password=os.getenv("POSTGRES_PASSWORD"),
+        user=os.getenv("POSTGRES_USERNAME", ""),
+        password=os.getenv("POSTGRES_PASSWORD", ""),
     )
     db.connect()
 

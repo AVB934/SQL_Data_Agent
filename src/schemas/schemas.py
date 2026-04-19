@@ -1,3 +1,5 @@
+#SQL_DATA_Agent\src\schemas\schemas.py
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -86,7 +88,8 @@ class ReviewDataResultSpec(DatabaseSchema):
     tables: list[UpdatedTableSpec] = Field(min_length=1)
 
     review_status: Literal["approved", "pending", "rejected"] = "pending"
-    reason: str | None = None
+    
+    reason: str = Field(default="") 
 
 
 # Citations (Traceability Layer)
