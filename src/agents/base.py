@@ -3,14 +3,15 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from src.LLM.gemini import GeminiClient
 from src.schemas.schemas import (
     ColumnDescription,
     TableSpec,
     UpdatedTableSpec,
 )
 
-
 # Shared Context (Pipeline State)
+
 
 class AgentContext:
     """
@@ -52,9 +53,7 @@ class BaseAgent(ABC):
         ...
 
 
-
 # Schema Agent
-
 
 
 class SchemaAgent(BaseAgent):
@@ -63,6 +62,11 @@ class SchemaAgent(BaseAgent):
 
     This should be run ONCE per query lifecycle.
     """
+
+    def __init__(self, context: AgentContext, schema_prompt: str = "") -> None:
+        super().__init__(context)
+        self.gemini_client = GeminiClient()
+        self.schema_prompt = schema_prompt
 
     def run(self) -> list[UpdatedTableSpec]:
         updated_tables: list[UpdatedTableSpec] = []
@@ -97,9 +101,20 @@ class SchemaAgent(BaseAgent):
         self.context.updated_tables = updated_tables
         return updated_tables
 
-  
-    # Placeholder for LLM call
-
     def _infer_column_meaning(self, column_name: str, table_name: str) -> str:
-        # Replace with LLM later
-        return f"{column_name} in {table_name}"
+        """
+        Use GeminiClient with schema_prompt to infer the semantic meaning of a column.
+        The prompt determines the analysis strategy.
+        """
+        # Construct question with just the data - prompt dictates the behavior
+        question = f"Column: {column_name}\nTable: {table_name}"
+
+        try:
+            response = self.gemini_client.run(
+                system_instruction=self.schema_prompt,
+                question=question,
+            )
+            return response.strip()
+        except Exception as e:
+            print(f"Error inferring column meaning for {column_name}: {e}")
+            return f"{column_name}"
