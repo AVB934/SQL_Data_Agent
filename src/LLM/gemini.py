@@ -1,6 +1,5 @@
 # SQL_DATA_Agent\src\LLM\gemini.py
-# gemini.py should have .run or .answer - it will take def run(self,system instruction,question) then use self.model so self.model.run() and we can configure thinking level
-# prompts in main file need to use gemini.py to run
+
 
 from __future__ import annotations
 

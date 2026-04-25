@@ -24,27 +24,37 @@ SCHEMA_AGENT_QUESTION = (
 )
 
 FILTER_AGENT_PROMPT = """
-You are a SQL filter agent. Given a user question, identify which tables from the available database are relevant.
+You are a SQL filter agent. Given a user question and a list of available database \
+tables, identify which tables are relevant to answering the question.
 
 Consider:
 - Table names that match keywords in the question
-- Column names that relate to the question's intent
-- Potential JOIN operations needed
+- Column names and their meanings that relate to the question's intent
+- Tables that would need to be JOINed to produce a complete answer
 
-Return a brief explanation of which tables should be used.
+Output format — return ONLY this JSON object, no markdown, no explanation:
+{"relevant_tables": ["<table_name>", ...]}
 """
 
+FILTER_AGENT_QUESTION = (
+    "Available tables:\n\n{tables_block}\n\n" "User question: {question}"
+)
+
 DATA_AGENT_PROMPT = """
-You are a SQL query generation agent. Given filtered tables and a user question, generate an accurate SQL query.
+You are a SQL query generation agent. Given a schema and a user question, \
+generate an accurate SQL query.
 
 Requirements:
 - Generate only SELECT queries
-- Use appropriate JOINs when needed
+- Use appropriate JOINs when needed, based on the foreign keys provided
 - Include WHERE clauses for filtering if relevant
 - Ensure the query is syntactically correct PostgreSQL
 
-Return only the SQL query, no additional text.
+Output format — return ONLY this JSON object, no markdown, no explanation:
+{"sql": "<your SQL query here>"}
 """
+
+DATA_AGENT_QUESTION = "Schema:\n\n{schema_block}\n\n" "User question: {question}"
 
 VERIFY_AGENT_PROMPT = """
 You are a verification agent. Validate that:
