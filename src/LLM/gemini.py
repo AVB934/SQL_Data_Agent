@@ -18,7 +18,7 @@ load_dotenv()
 class GeminiClient:
     def __init__(
         self,
-        model: str = "gemini-1.5-flash",
+        model: str = "gemini-2.0-flash",
         thinking_budget: int = 1024,
     ) -> None:
         self.model_name = model

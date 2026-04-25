@@ -117,7 +117,6 @@ else:
 # ----------------------------
 st.sidebar.divider()
 st.sidebar.subheader("Model")
-# BUG FIX 2: derive the model name from GeminiClient directly so the UI
 # stays in sync if the default ever changes in gemini.py
 st.sidebar.write(GeminiClient().model_name)
 
