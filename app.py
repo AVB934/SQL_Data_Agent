@@ -1,7 +1,3 @@
-# build streamlit ui - first show message if connection successfull then  open chat window,
-# after postgres details, in the chat window have user message, response, enter button, text boxs for questions, left side pane can have metadata
-# left side pane of ui - model name,database,table names,and if you click table you get column names, and data types
-
 # SQL_DATA_Agent\app.py
 
 import os
@@ -9,6 +5,7 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
+from src.LLM.gemini import GeminiClient
 from src.main import Main
 
 load_dotenv()
@@ -23,7 +20,11 @@ if "connected" not in st.session_state:
     st.session_state.connected = False
 
 if "main_agent" not in st.session_state:
-    st.session_state.main_agent = None  # Main | None
+    st.session_state.main_agent = None
+
+# BUG FIX 3: store connection feedback outside the form so it survives reruns
+if "connection_feedback" not in st.session_state:
+    st.session_state.connection_feedback = None  # ("success"|"error", message)
 
 if "db_config" not in st.session_state:
     st.session_state.db_config = {
@@ -42,7 +43,6 @@ st.sidebar.title("Database Explorer")
 st.sidebar.subheader("Connection")
 
 with st.sidebar.form("db_connection_form"):
-    # use local variables — only write to session_state on submit
     host = st.text_input("Host", value=st.session_state.db_config["host"])
     port = st.number_input("Port", value=st.session_state.db_config["port"])
     database = st.text_input("Database", value=st.session_state.db_config["database"])
@@ -53,38 +53,62 @@ with st.sidebar.form("db_connection_form"):
         type="password",
     )
 
-    if st.form_submit_button("Connect to DB"):
-        # write to session_state only after submit, not on every render
-        st.session_state.db_config = {
-            "host": host,
-            "port": int(port),
-            "database": database,
-            "user": user,
-            "password": password,
-        }
+    submitted = st.form_submit_button("Connect to DB")
 
-        try:
-            main_agent = Main()
-            connected = main_agent.connect(**st.session_state.db_config)
+if submitted:
+    st.session_state.db_config = {
+        "host": host,
+        "port": int(port),
+        "database": database,
+        "user": user,
+        "password": password,
+    }
 
-            if connected:
-                st.session_state.main_agent = main_agent
-                st.session_state.connected = True
-                st.success("Connected successfully!")
-            else:
-                st.session_state.connected = False
-                st.error("Failed to connect to database")
-
-        except Exception as e:
+    try:
+        # BUG FIX 1: close existing connection before creating a new one
+        if st.session_state.main_agent is not None:
+            st.session_state.main_agent.disconnect()
+            st.session_state.main_agent = None
             st.session_state.connected = False
-            st.error(f"Connection error: {str(e)}")
 
+        main_agent = Main()
+        connected = main_agent.connect(**st.session_state.db_config)
 
-# connection status indicator
+        if connected:
+            st.session_state.main_agent = main_agent
+            st.session_state.connected = True
+            # BUG FIX 4: clear stale chat history from any previous connection
+            st.session_state.messages = []
+            # BUG FIX 3: store feedback in session_state, not inside the form
+            st.session_state.connection_feedback = (
+                "success",
+                f"Connected to {database}@{host}",
+            )
+        else:
+            st.session_state.connected = False
+            st.session_state.connection_feedback = (
+                "error",
+                "Failed to connect to database.",
+            )
+
+    except Exception as e:
+        st.session_state.connected = False
+        st.session_state.connection_feedback = ("error", f"Connection error: {e}")
+
+# BUG FIX 3: render feedback outside the form so it persists across reruns
+if st.session_state.connection_feedback:
+    level, msg = st.session_state.connection_feedback
+    if level == "success":
+        st.sidebar.success(msg)
+    else:
+        st.sidebar.error(msg)
+
+# persistent status indicator
+st.sidebar.divider()
 if st.session_state.connected:
-    st.sidebar.success("Connected")
+    st.sidebar.success("● Connected")
 else:
-    st.sidebar.error("Not connected")
+    st.sidebar.error("● Not connected")
 
 
 # ----------------------------
@@ -92,7 +116,9 @@ else:
 # ----------------------------
 st.sidebar.divider()
 st.sidebar.subheader("Model")
-st.sidebar.write("gemini-2.0-flash")
+# BUG FIX 2: derive the model name from GeminiClient directly so the UI
+# stays in sync if the default ever changes in gemini.py
+st.sidebar.write(GeminiClient().model_name)
 
 
 # ----------------------------
@@ -102,13 +128,11 @@ st.sidebar.divider()
 st.sidebar.subheader("Tables")
 
 if st.session_state.connected and st.session_state.main_agent:
-    # build schema from live loaded tables
     for table in st.session_state.main_agent.tables:
         with st.sidebar.expander(table.table_name):
             for col in table.columns:
-                st.write(f"{col.name} : {col.dtype}")  # col.dtype not col.type
+                st.write(f"{col.name} : {col.dtype}")
 else:
-    # placeholder when not connected
     st.sidebar.caption("Connect to a database to explore tables.")
 
 
@@ -117,16 +141,14 @@ else:
 # ----------------------------
 st.title("SQL Data Agent")
 
-# show full chat history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.write(msg["content"])
+        # BUG FIX 5: use st.markdown — _format_answer returns a markdown table
+        st.markdown(msg["content"])
 
-        # re-render detail expanders from history if present
         if msg.get("details"):
             with st.expander("View details"):
                 details = msg["details"]
-
                 st.markdown(f"**Verification status:** `{details['review_status']}`")
 
                 if details.get("citations"):
@@ -141,12 +163,9 @@ for msg in st.session_state.messages:
                             f"- `{c['table_name']}` — `{c['column_name']}` = `{row_val}`"
                         )
 
-
-# user input
 user_input = st.chat_input("Ask a question about your data...")
 
 if user_input:
-    # add user message to history
     st.session_state.messages.append({"role": "user", "content": user_input})
 
     if st.session_state.connected and st.session_state.main_agent:
@@ -155,8 +174,6 @@ if user_input:
 
         if final_answer:
             response = final_answer.answer
-
-            # store details so they survive rerenders
             details = {
                 "review_status": final_answer.review_status,
                 "citations": [
@@ -176,13 +193,8 @@ if user_input:
         response = "Please connect to a database first."
         details = None
 
-    # add assistant message with optional details
     st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": response,
-            "details": details,
-        }
+        {"role": "assistant", "content": response, "details": details}
     )
 
     st.rerun()

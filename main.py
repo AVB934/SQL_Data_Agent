@@ -1,32 +1,19 @@
 # SQL_DATA_Agent\main.py
 
-import os
-
-from dotenv import load_dotenv
-
-from src.db import Database
+import subprocess
+import sys
 
 
 def main():
-
-    load_dotenv()
-
-    # Create a database connection
-    db = Database(
-        host="localhost",
-        port=5432,
-        database="weather_db",
-        user=os.getenv("POSTGRES_USERNAME", ""),
-        password=os.getenv("POSTGRES_PASSWORD", ""),
+    """
+    Entry point for the SQL Data Agent.
+    Launches the Streamlit frontend — all DB connection,
+    querying, and agent logic is handled through app.py.
+    """
+    subprocess.run(
+        [sys.executable, "-m", "streamlit", "run", "app.py"],
+        check=True,
     )
-    db.connect()
-
-    # Execute a query
-    result = db.execute_query("SELECT * FROM weather_data;")
-    print(result)
-
-    # Close the database connection
-    db.close()
 
 
 if __name__ == "__main__":
