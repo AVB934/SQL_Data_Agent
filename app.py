@@ -6,6 +6,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from src.LLM.gemini import GeminiClient
+from src.LLM.usage_tracker import UsageTracker
 from src.main import Main
 
 load_dotenv()
@@ -22,7 +23,7 @@ if "connected" not in st.session_state:
 if "main_agent" not in st.session_state:
     st.session_state.main_agent = None
 
-# BUG FIX 3: store connection feedback outside the form so it survives reruns
+
 if "connection_feedback" not in st.session_state:
     st.session_state.connection_feedback = None  # ("success"|"error", message)
 
@@ -65,7 +66,7 @@ if submitted:
     }
 
     try:
-        # BUG FIX 1: close existing connection before creating a new one
+
         if st.session_state.main_agent is not None:
             st.session_state.main_agent.disconnect()
             st.session_state.main_agent = None
@@ -77,9 +78,9 @@ if submitted:
         if connected:
             st.session_state.main_agent = main_agent
             st.session_state.connected = True
-            # BUG FIX 4: clear stale chat history from any previous connection
+
             st.session_state.messages = []
-            # BUG FIX 3: store feedback in session_state, not inside the form
+
             st.session_state.connection_feedback = (
                 "success",
                 f"Connected to {database}@{host}",
@@ -95,7 +96,7 @@ if submitted:
         st.session_state.connected = False
         st.session_state.connection_feedback = ("error", f"Connection error: {e}")
 
-# BUG FIX 3: render feedback outside the form so it persists across reruns
+
 if st.session_state.connection_feedback:
     level, msg = st.session_state.connection_feedback
     if level == "success":
@@ -120,6 +121,42 @@ st.sidebar.subheader("Model")
 # stays in sync if the default ever changes in gemini.py
 st.sidebar.write(GeminiClient().model_name)
 
+# ----------------------------
+# SIDEBAR — API USAGE
+# ----------------------------
+st.sidebar.divider()
+st.sidebar.subheader("Gemini API Usage (today)")
+
+tracker = UsageTracker()
+summary = tracker.summary()
+
+# Requests bar
+req_pct = summary["requests_pct"] / 100
+st.sidebar.caption(f"Requests: {summary['requests']} / {summary['requests_limit']}")
+st.sidebar.progress(
+    min(req_pct, 1.0),
+    text=f"{summary['requests_pct']}%",
+)
+
+# Token bar
+tok_pct = summary["tokens_pct"] / 100
+st.sidebar.caption(
+    f"Input tokens: {summary['input_tokens']:,} / {summary['input_tokens_limit']:,}"
+)
+st.sidebar.progress(
+    min(tok_pct, 1.0),
+    text=f"{summary['tokens_pct']}%",
+)
+
+# Warning banners
+if tracker.is_exhausted():
+    st.sidebar.error("Quota nearly exhausted — requests will fail.")
+elif tracker.is_near_limit():
+    st.sidebar.warning("Approaching daily free tier limit (80%+).")
+else:
+    st.sidebar.success("Usage within limits.")
+
+st.sidebar.caption("Resets daily at midnight Pacific time.")
 
 # ----------------------------
 # SIDEBAR — TABLE EXPLORER
