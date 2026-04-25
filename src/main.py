@@ -1,7 +1,4 @@
 # SQL_DATA_Agent\src\main.py
-# Prompts are defined in src/config/prompts.py
-# All agents use GeminiClient with prompts to guide LLM behavior
-# Agents: SchemaAgent, FilterAgent, DataAgent, VerifyAgent
 
 from __future__ import annotations
 
@@ -31,11 +28,11 @@ class Main:
     def __init__(self):
         self.db: Optional[Database] = None
         self.tables: list[TableSpec] = []
-
-        # shared execution context
         self.context: Optional[AgentContext] = None
 
+    # ------------------------------------------------------------------
     # DB CONNECTION
+    # ------------------------------------------------------------------
 
     def connect(
         self,
@@ -54,13 +51,9 @@ class Main:
                 password=password,
             )
             self.db.connect()
-
-            # Load tables from database and convert to TableSpec
             self.tables = self._load_tables_from_database()
-
             print(f"Connected to {database}@{host}")
             print(f"Loaded {len(self.tables)} tables")
-
             return True
 
         except Exception as e:
@@ -68,30 +61,16 @@ class Main:
             return False
 
     def _load_tables_from_database(self) -> list[TableSpec]:
-        """
-        Introspect database schema and convert to TableSpec objects.
-        """
         if not self.db:
             return []
 
         try:
-            # Get raw schema from database
             raw_tables = self.db.get_tables()
-
             table_specs = []
+
             for table_data in raw_tables:
                 table_name = table_data["table_name"]
 
-                # Get primary keys
-                primary_keys = self._get_primary_keys(table_name)
-
-                # Get foreign keys
-                foreign_keys = self._get_foreign_keys(table_name)
-
-                # Get sample rows
-                sample_rows = self._get_sample_rows(table_name)
-
-                # Convert columns to ColumnSpec
                 columns = [
                     ColumnSpec(
                         name=col["name"],
@@ -101,15 +80,13 @@ class Main:
                     for col in table_data["columns"]
                 ]
 
-                # Create TableSpec
                 table_spec = TableSpec(
                     table_name=table_name,
                     columns=columns,
-                    primary_key=primary_keys,
-                    foreign_keys=foreign_keys,
-                    sample_rows=sample_rows,
+                    primary_key=self._get_primary_keys(table_name),
+                    foreign_keys=self._get_foreign_keys(table_name),
+                    sample_rows=self._get_sample_rows(table_name),
                 )
-
                 table_specs.append(table_spec)
 
             return table_specs
@@ -119,10 +96,6 @@ class Main:
             return []
 
     def _get_primary_keys(self, table_name: str) -> list[str]:
-        """
-        Get primary keys for a table using information_schema.
-        Uses parameterized queries to prevent SQL injection.
-        """
         if not self.db:
             return []
 
@@ -130,7 +103,7 @@ class Main:
             query = """
                 SELECT column_name
                 FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu 
+                JOIN information_schema.key_column_usage kcu
                   ON tc.constraint_name = kcu.constraint_name
                 WHERE tc.table_name = %s AND tc.constraint_type = 'PRIMARY KEY'
                   AND tc.table_schema = 'public'
@@ -142,10 +115,6 @@ class Main:
             return []
 
     def _get_foreign_keys(self, table_name: str) -> list[ForeignKey]:
-        """
-        Get foreign keys for a table using information_schema.
-        Uses parameterized queries to prevent SQL injection.
-        """
         if not self.db:
             return []
 
@@ -156,71 +125,47 @@ class Main:
                     ccu.table_name AS references_table,
                     ccu.column_name AS references_column
                 FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu 
+                JOIN information_schema.key_column_usage kcu
                   ON tc.constraint_name = kcu.constraint_name
-                JOIN information_schema.constraint_column_usage ccu 
+                JOIN information_schema.constraint_column_usage ccu
                   ON ccu.constraint_name = tc.constraint_name
                 WHERE tc.table_name = %s AND tc.constraint_type = 'FOREIGN KEY'
                   AND tc.table_schema = 'public'
             """
             results = self.db.execute_query(query, (table_name,))
-
-            foreign_keys = []
-            if results:
-                for col, ref_table, ref_col in results:
-                    foreign_keys.append(
-                        ForeignKey(
-                            column=col,
-                            references_table=ref_table,
-                            references_column=ref_col,
-                        )
-                    )
-
-            return foreign_keys
+            return [
+                ForeignKey(
+                    column=col, references_table=ref_table, references_column=ref_col
+                )
+                for col, ref_table, ref_col in (results or [])
+            ]
         except Exception as e:
             print(f"Error getting foreign keys for {table_name}: {e}")
             return []
 
     def _get_sample_rows(self, table_name: str, limit: int = 5) -> list[dict[str, Any]]:
-        """
-        Get sample rows from a table.
-        Note: Table name cannot be parameterized, but we validate it exists first.
-        """
         if not self.db or not self.db.connection:
             return []
 
         try:
-            # Validate table exists in information_schema first (safe validation)
-            validation_query = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s"
-            validation_result = self.db.execute_query(validation_query, (table_name,))
-
-            if not validation_result:
+            validation_query = (
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = 'public' AND table_name = %s"
+            )
+            if not self.db.execute_query(validation_query, (table_name,)):
                 print(f"Table {table_name} not found in schema")
                 return []
 
-            # Safe to execute with table name since we validated it exists
-            query = f"SELECT * FROM {table_name} LIMIT {limit}"
-
             cursor = self.db.connection.cursor()
-            cursor.execute(query)
-            results = cursor.fetchall()
-
-            # Get column names from cursor description
-            column_names = (
+            cursor.execute(f"SELECT * FROM {table_name} LIMIT {limit}")
+            rows = cursor.fetchall()
+            columns = (
                 [desc[0] for desc in cursor.description] if cursor.description else []
             )
             cursor.close()
 
-            if not results or not column_names:
-                return []
+            return [dict(zip(columns, row)) for row in rows]
 
-            # Convert rows to dictionaries
-            sample_rows = [
-                {col_name: value for col_name, value in zip(column_names, row)}
-                for row in results
-            ]
-
-            return sample_rows
         except Exception as e:
             print(f"Error getting sample rows for {table_name}: {e}")
             return []
@@ -231,7 +176,10 @@ class Main:
             self.db = None
             print("Database connection closed")
 
+    # ------------------------------------------------------------------
     # MAIN EXECUTION
+    # ------------------------------------------------------------------
+
     def answer(self, question: str) -> Optional[FinalAnswer]:
         if not self.db:
             print("No database connection. Call connect() first.")
@@ -243,23 +191,21 @@ class Main:
 
         print(f"\nQuestion: {question}\n")
 
-        # Initialize Context - ONCE for all agents
         self.context = AgentContext(self.tables)
-        self.context.metadata["db"] = self.db  # Database connection for DataAgent
+        self.context.metadata["db"] = self.db
 
         # 1. SCHEMA AGENT
-
         schema_agent = SchemaAgent(self.context, SCHEMA_AGENT_PROMPT)
         enriched_tables = schema_agent.run()
 
         if not enriched_tables:
-            print("Schema agent failed")
+            print("Schema agent failed — no tables enriched.")
             return None
 
+        self.context.updated_tables = enriched_tables
         print(f"Schema enriched: {len(enriched_tables)} tables")
 
         # 2. FILTER AGENT
-
         filter_agent = FilterAgent(self.context, FILTER_AGENT_PROMPT)
         filtered_spec = filter_agent.run(question)
 
@@ -273,31 +219,33 @@ class Main:
         print(f"Filtered to {len(filtered_spec.filtered_tables)} tables")
 
         # 3. DATA AGENT
-
         data_agent = DataAgent(self.context, DATA_AGENT_PROMPT)
-        data_result: DataResultSpec = data_agent.run(
-            question,
-            filtered_spec,
-        )
-
-        if not data_result:
-            print("Data agent failed")
+        try:
+            data_result: DataResultSpec = data_agent.run(question, filtered_spec)
+        except Exception as e:
+            # BUG FIX 2: DataAgent raises on failure — catch it explicitly
+            # rather than checking truthiness of a Pydantic model.
+            print(f"Data agent failed: {e}")
             return None
 
         print(f"Query executed, rows: {len(data_result.results)}")
 
         # 4. VERIFY DATA
-
         review_data = verify_agent.review_data(data_result)
-
         print(f"Verification status: {review_data.review_status}")
 
-        # 5. CITATIONS
+        if review_data.review_status == "rejected":
+            print(f"Data verification rejected: {review_data.reason}")
+            return None
 
+        # 5. CITATIONS
         citations = self._generate_citations(data_result)
 
-        # 6. FINAL ANSWER
+        if not citations:
+            print("Warning: no citations could be generated for this result.")
+            return None
 
+        # 6. FINAL ANSWER
         final_answer = FinalAnswer(
             original_question=question,
             answer=self._format_answer(data_result),
@@ -308,40 +256,56 @@ class Main:
         print("\nDone\n")
         return final_answer
 
+    # ------------------------------------------------------------------
     # HELPERS
+    # ------------------------------------------------------------------
 
-    # Need primary key to identify row
+    def _generate_citations(self, data_result: DataResultSpec) -> list[Citation]:
+        """
+        Builds one Citation per (table, row) pair using the full composite
+        primary key as the row identifier.
 
-    def _generate_citations(
-        self,
-        data_result: DataResultSpec,
-    ) -> list[Citation]:
+        """
         citations: list[Citation] = []
 
         for table in data_result.tables:
+            if not table.primary_key:
+                continue
+
             for row in data_result.results:
-                if not table.primary_key:
+                # Build identifier from all PK columns present in the row
+                row_identifier = {
+                    pk_col: row[pk_col] for pk_col in table.primary_key if pk_col in row
+                }
+
+                # Skip rows where none of the PK columns came back
+                if not row_identifier:
                     continue
 
-                pk = table.primary_key[0]
-
-                if pk not in row:
-                    continue
-
-                citation = Citation(
-                    source_file="database",
-                    table_name=table.table_name,
-                    column_name=pk,
-                    row_identifier={pk: row[pk]},
+                citations.append(
+                    Citation(
+                        source_file="database",
+                        table_name=table.table_name,
+                        column_name=table.primary_key[0],  # lead column for display
+                        row_identifier=row_identifier,
+                    )
                 )
-                citations.append(citation)
 
         return citations
 
     def _format_answer(self, data_result: DataResultSpec) -> str:
+
         if not data_result.results:
             return "No results found."
 
-        lines = [str(row) for row in data_result.results]
+        rows = data_result.results
+        headers = list(rows[0].keys())
 
-        return f"Query:\n{data_result.query}\n\nResults:\n" + "\n".join(lines)
+        # Header row
+        header_line = " | ".join(headers)
+        separator = " | ".join("---" for _ in headers)
+
+        # Data rows
+        data_lines = [" | ".join(str(row.get(h, "")) for h in headers) for row in rows]
+
+        return "\n".join([header_line, separator] + data_lines)
