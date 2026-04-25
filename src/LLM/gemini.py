@@ -25,7 +25,7 @@ class GeminiClient:
 
     def __init__(
         self,
-        model: str = "gemini-2.0-flash",
+        model: str = "gemini-3.0-flash",
         thinking_budget: int = 1024,
     ) -> None:
 
