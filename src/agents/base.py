@@ -110,8 +110,8 @@ class SchemaAgent(BaseAgent):
         self,
         column_name: str,
         table_name: str,
-        dtype: str,              # ← was missing
-        sample_values: list[str], # ← was missing
+        dtype: str,              
+        sample_values: list[str], 
     ) -> str:
         """
         Use GeminiClient to infer the semantic meaning of a column.
