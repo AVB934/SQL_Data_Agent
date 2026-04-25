@@ -1,7 +1,8 @@
-#SQL_DATA_Agent\src\schemas\schemas.py
+# SQL_DATA_Agent\src\schemas\schemas.py
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,12 +65,18 @@ class FilteredSpec(DatabaseSchema):
 
 
 class DataResultSpec(DatabaseSchema):
-    query: str = Field(min_length=1)  # executed SQL
+    # Pydantic v2 config (fixes Decimal JSON crash)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True, json_encoders={Decimal: lambda v: float(v)}
+    )
 
-    # Each row must preserve column → value mapping
+    # executed SQL query
+    query: str = Field(min_length=1)
+
+    # list of rows (must be JSON-safe after conversion in DataAgent)
     results: list[dict[str, Any]] = Field(default_factory=list)
 
-    # Tables used in query
+    # tables used for query generation
     tables: list[UpdatedTableSpec] = Field(min_length=1)
 
 
@@ -88,8 +95,8 @@ class ReviewDataResultSpec(DatabaseSchema):
     tables: list[UpdatedTableSpec] = Field(min_length=1)
 
     review_status: Literal["approved", "pending", "rejected"] = "pending"
-    
-    reason: str = Field(default="") 
+
+    reason: str = Field(default="")
 
 
 # Citations (Traceability Layer)

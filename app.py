@@ -1,5 +1,6 @@
 # SQL_DATA_Agent\app.py
 
+import logging
 import os
 
 import streamlit as st
@@ -10,6 +11,12 @@ from src.LLM.usage_tracker import UsageTracker
 from src.main import Main
 
 load_dotenv()
+
+
+logging.basicConfig(
+    level=logging.INFO,  # change to DEBUG if needed
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+)
 
 # ----------------------------
 # SESSION STATE INIT
