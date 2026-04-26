@@ -243,7 +243,7 @@ class Main:
 
         if not citations:
             print("Warning: no citations could be generated for this result.")
-            return None
+            citations = []
 
         # 6. FINAL ANSWER
         final_answer = FinalAnswer(
@@ -294,18 +294,23 @@ class Main:
         return citations
 
     def _format_answer(self, data_result: DataResultSpec) -> str:
-
         if not data_result.results:
             return "No results found."
 
         rows = data_result.results
+
+        # ✅ Single value → return clean
+        if len(rows) == 1 and len(rows[0]) == 1:
+            return str(list(rows[0].values())[0])
+
         headers = list(rows[0].keys())
 
-        # Header row
         header_line = " | ".join(headers)
         separator = " | ".join("---" for _ in headers)
 
-        # Data rows
-        data_lines = [" | ".join(str(row.get(h, "")) for h in headers) for row in rows]
+        data_lines = [
+            " | ".join(str(row.get(h, "")) for h in headers)
+            for row in rows[:20]  # limit output
+        ]
 
         return "\n".join([header_line, separator] + data_lines)

@@ -225,7 +225,7 @@ if user_input:
                         "column_name": c.column_name,
                         "row_identifier": c.row_identifier,
                     }
-                    for c in final_answer.citations
+                    for c in (final_answer.citations or [])
                 ],
             }
         else:

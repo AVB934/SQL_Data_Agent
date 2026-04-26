@@ -113,11 +113,16 @@ class Citation(DatabaseSchema):
 
 # Final Answer
 
+class FinalAnswerSpec(DatabaseSchema):
+    answer: str
+    review_status: str
+    citations: list[Any] = []
 
 class FinalAnswer(DatabaseSchema):
     original_question: str = Field(min_length=1)
     answer: str = Field(min_length=1)
 
-    citations: list[Citation] = Field(min_length=1)
+    
+    citations: list[Citation] = Field(default_factory=list)
 
     review_status: Literal["approved", "pending", "rejected"] = "pending"

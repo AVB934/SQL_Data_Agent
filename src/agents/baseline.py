@@ -10,6 +10,7 @@ from typing import Any
 
 from src.agents.base import BaseAgent
 from src.config.prompts import (
+    DATA_AGENT_PROMPT,
     DATA_AGENT_QUESTION,
     FILTER_AGENT_PROMPT,
     FILTER_AGENT_QUESTION,
@@ -133,7 +134,7 @@ class DataAgent(BaseAgent):
     Generates and executes SQL queries with deep type diagnostics.
     """
 
-    def __init__(self, context, data_prompt: str):
+    def __init__(self, context, data_prompt: str = DATA_AGENT_PROMPT):
         super().__init__(context)
         self.logger = logging.getLogger(self.__class__.__name__)
         self.gemini_client = GeminiClient()
@@ -197,6 +198,28 @@ class DataAgent(BaseAgent):
         self.logger.info("[FINAL INSPECTION COMPLETE]")
 
     # ------------------------------------------------------------
+    # SAFE SQL PARSER
+    # ------------------------------------------------------------
+    def _parse_sql_query(self, response: str) -> str:
+        self.logger.info(f"[DATA][RAW RESPONSE]\n{response}")
+
+        try:
+            cleaned = re.sub(r"```(?:json)?|```", "", response).strip()
+            self.logger.debug(f"[DATA][CLEANED RESPONSE]\n{cleaned}")
+
+            data = json.loads(cleaned)
+            sql = data.get("sql", "").strip()
+
+            if not sql:
+                raise ValueError("Empty SQL returned from LLM")
+
+            return sql
+
+        except json.JSONDecodeError as e:
+            self.logger.error(f"[DATA][JSON PARSE FAILED] {e}")
+            raise
+
+    # ------------------------------------------------------------
     # MAIN PIPELINE
     # ------------------------------------------------------------
     def run(self, question: str, filtered_spec: FilteredSpec) -> DataResultSpec:
@@ -205,26 +228,43 @@ class DataAgent(BaseAgent):
         if not db:
             raise RuntimeError("No DB connection")
 
+        # PRE-EXECUTION RESET
+        try:
+            db.connection.rollback()
+            self.logger.info("[DATA][ROLLBACK] Connection reset")
+        except Exception as e:
+            self.logger.warning(f"[DATA][ROLLBACK SKIPPED] {e}")
+
         self.logger.info(f"[DATA][INPUT] {question}")
         self.logger.info(
             f"[DATA][TABLES] {[t.table_name for t in filtered_spec.filtered_tables]}"
         )
 
-        # LLM → SQL
+        # BUILD PROMPT
+        built_question = self._build_data_question(question, filtered_spec)
+
+        # LLM CALL
         response = self.gemini_client.run(
             system_instruction=self.data_prompt,
-            question=question,
+            question=built_question,
         )
 
         self.logger.info(f"[DATA][LLM OUTPUT] {response}")
 
-        query = json.loads(response)["sql"]
+        # SAFE PARSE
+        query = self._parse_sql_query(response)
         self.logger.info(f"[DATA][SQL] {query}")
 
-        # EXECUTE SQL
+        # TABLE SAFETY CHECK
+        allowed_tables = {t.table_name for t in filtered_spec.filtered_tables}
+        if not any(t in query for t in allowed_tables):
+            self.logger.error(f"[DATA][INVALID TABLE USAGE] {query}")
+            raise ValueError("Query uses unknown tables")
+
         cursor = db.connection.cursor()
 
         try:
+            self.logger.info("[DATA][EXECUTION] Running SQL")
             cursor.execute(query)
 
             columns = [c[0] for c in cursor.description]
@@ -233,24 +273,34 @@ class DataAgent(BaseAgent):
             self.logger.info(f"[DATA][ROWS] fetched={len(rows)}")
             self.logger.info(f"[DATA][COLUMNS] {columns}")
 
-            # 🔥 CRITICAL: RAW inspection BEFORE ANY conversion
             self._inspect_raw_rows(columns, rows)
+
+        except Exception as e:
+            self.logger.error(f"[DATA][SQL ERROR] {e}")
+
+            # CRITICAL: rollback after failure
+            try:
+                db.connection.rollback()
+                self.logger.warning("[DATA][ROLLBACK AFTER ERROR]")
+            except Exception as rollback_error:
+                self.logger.error(f"[DATA][ROLLBACK FAILED] {rollback_error}")
+
+            raise
 
         finally:
             cursor.close()
 
-        # CONVERT ROWS
-        results_dict = [
+        # NORMALIZE
+        results_dict: list[dict[str, Any]] = [
             self._normalize(dict(zip(columns, row)), path=f"row[{i}]")
             for i, row in enumerate(rows)
         ]
 
-        # FINAL SAFETY CHECK
+        # FINAL CHECK
         self._inspect_final_rows(results_dict)
 
-        # FINAL LOG BEFORE RETURN
         try:
-            json.dumps(results_dict)  # hard validation
+            json.dumps(results_dict)
             self.logger.info("[DATA] JSON SERIALIZATION OK")
         except Exception as e:
             self.logger.critical(f"[DATA] STILL BROKEN JSON: {e}")
@@ -267,11 +317,6 @@ class DataAgent(BaseAgent):
     # ------------------------------------------------------------------
 
     def _build_data_question(self, question: str, filtered_spec: FilteredSpec) -> str:
-        """
-        Gives the LLM a full schema snapshot for every relevant table and
-        fills the DATA_AGENT_QUESTION template.
-        The output format contract lives in DATA_AGENT_PROMPT, not here.
-        """
         table_blocks: list[str] = []
 
         for table in filtered_spec.filtered_tables:
@@ -280,19 +325,9 @@ class DataAgent(BaseAgent):
                 f"{' NOT NULL' if not c.is_nullable else ''}"
                 for c in table.columns
             ]
-            fk_lines = [
-                f"    - {fk.column} → {fk.references_table}.{fk.references_column}"
-                for fk in table.foreign_keys
-            ]
-            sample_lines = [f"    {json.dumps(row)}" for row in table.sample_rows[:3]]
 
             block = f"Table: {table.table_name}\n"
-            block += "  Primary key: " + ", ".join(table.primary_key) + "\n"
             block += "  Columns:\n" + "\n".join(col_lines)
-            if fk_lines:
-                block += "\n  Foreign keys:\n" + "\n".join(fk_lines)
-            if sample_lines:
-                block += "\n  Sample rows:\n" + "\n".join(sample_lines)
 
             table_blocks.append(block)
 
@@ -300,32 +335,6 @@ class DataAgent(BaseAgent):
             schema_block="\n\n".join(table_blocks),
             question=question,
         )
-
-    def _parse_sql_query(self, response: str) -> str:
-        import json
-        import re
-
-        self.logger.info(f"[DATA][RAW RESPONSE]\n{response}")
-
-        try:
-            # remove ```json and ```
-            cleaned = re.sub(r"```(?:json)?|```", "", response).strip()
-
-            self.logger.debug(f"[DATA][CLEANED RESPONSE]\n{cleaned}")
-
-            data = json.loads(cleaned)
-
-            sql = data.get("sql", "").strip()
-
-            if not sql:
-                raise ValueError("Empty SQL returned from LLM")
-
-            return sql
-
-        except json.JSONDecodeError as e:
-            self.logger.error(f"[DATA][JSON PARSE FAILED] {e}")
-            self.logger.error(f"[DATA][RAW]\n{response}")
-            raise
 
 
 # ---------------------------------------------------------------------------
